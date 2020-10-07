@@ -4,8 +4,6 @@ import logging
 import os
 from timeit import default_timer as timer
 
-import six
-
 from torchtext.utils import unicode_csv_reader
 
 from .dataset import MatchingDataset
@@ -103,7 +101,10 @@ def process(path,
             left_prefix='left_',
             right_prefix='right_',
             use_magellan_convention=False,
-            pca=True):
+            pca=True,
+            image_column=None,
+            image_path=None
+            ):
     """Creates dataset objects for multiple splits of a dataset.
 
     This involves the following steps (if data cannot be retrieved from the cache):

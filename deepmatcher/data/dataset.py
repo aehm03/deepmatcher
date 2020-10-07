@@ -313,6 +313,9 @@ class MatchingDataset(data.Dataset):
         """
         rows = []
         columns = list(name for name, field in six.iteritems(self.fields) if field)
+
+        # TODO append image column to raw table
+
         for ex in self.examples:
             row = []
             for attr in columns:

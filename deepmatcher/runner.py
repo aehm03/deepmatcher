@@ -229,6 +229,9 @@ class Runner(object):
             cum_stats.update(float(loss), *scores)
             stats.update(float(loss), *scores)
 
+            if batch_callback is not None:
+                batch_callback(stats.f1(), batch_idx)
+
             if return_predictions:
                 for idx, id in enumerate(getattr(batch, id_attr)):
                     predictions.append((id, float(output[idx, 1].exp())))
@@ -259,6 +262,9 @@ class Runner(object):
             pbar.close()
         elif progress_style == 'bar':
             sys.stderr.flush()
+
+        if epoch_callback is not None:
+            epoch_callback(stats.f1(), epoch + 1)
 
         Runner._print_final_stats(epoch + 1, runtime, datatime, cum_stats)
 
@@ -294,7 +300,6 @@ class Runner(object):
         Returns:
             float: The best F1 score obtained by the model on the validation dataset.
         """
-
         model.initialize(train_dataset)
 
         model._register_train_buffer('optimizer_state', None)
