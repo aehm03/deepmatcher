@@ -3,7 +3,9 @@ import io
 import logging
 import os
 from timeit import default_timer as timer
+from typing import Tuple, List
 
+from deepmatcher.data.image_field import ImageField
 from torchtext.utils import unicode_csv_reader
 
 from .dataset import MatchingDataset
@@ -30,8 +32,8 @@ def _check_header(header, id_attr, left_prefix, right_prefix, label_attr, ignore
         if attr not in (id_attr, label_attr) and attr not in ignore_columns:
             if not attr.startswith(left_prefix) and not attr.startswith(right_prefix):
                 raise ValueError('Attribute ' + attr + ' is not a left or a right table '
-                                 'column, not a label or id and is not ignored. Not sure '
-                                 'what it is...')
+                                                       'column, not a label or id and is not ignored. Not sure '
+                                                       'what it is...')
 
     num_left = sum(attr.startswith(left_prefix) for attr in header)
     num_right = sum(attr.startswith(right_prefix) for attr in header)
@@ -39,7 +41,7 @@ def _check_header(header, id_attr, left_prefix, right_prefix, label_attr, ignore
 
 
 def _make_fields(header, id_attr, label_attr, ignore_columns, lower, tokenize,
-                 include_lengths):
+                 include_lengths, image_path=None, image_fields=None):
     r"""Create field metadata, i.e., attribute processing specification for each
     attribute.
 
@@ -60,6 +62,7 @@ def _make_fields(header, id_attr, label_attr, ignore_columns, lower, tokenize,
         include_lengths=include_lengths)
     numeric_field = MatchingField(
         sequential=False, preprocessing=lambda x: int(x), use_vocab=False)
+    image_field = ImageField(image_path)
     id_field = MatchingField(sequential=False, use_vocab=False, id=True)
 
     fields = []
@@ -70,6 +73,8 @@ def _make_fields(header, id_attr, label_attr, ignore_columns, lower, tokenize,
             fields.append((attr, numeric_field))
         elif attr in ignore_columns:
             fields.append((attr, None))
+        elif attr in image_fields:
+            fields.append((attr, image_field))
         else:
             fields.append((attr, text_field))
     return fields
@@ -102,9 +107,10 @@ def process(path,
             right_prefix='right_',
             use_magellan_convention=False,
             pca=True,
-            image_column=None,
-            image_path=None
-            ):
+            image_path: str = None,
+            image_fields: List[str] = [],
+            **kwargs
+            ) -> Tuple[MatchingDataset, ...]:
     """Creates dataset objects for multiple splits of a dataset.
 
     This involves the following steps (if data cannot be retrieved from the cache):
@@ -175,6 +181,8 @@ def process(path,
             Specifically, set them to be '_id', 'ltable_', and 'rtable_' respectively.
         pca (bool): Whether to compute PCA for each attribute (needed for SIF model).
             Defaults to False.
+        image_path: path to directory of image files
+        image_fields: fields that contain image names for left and right (
 
     Returns:
         Tuple[MatchingDataset]: Datasets for (train, validation, and test) splits in that
@@ -197,8 +205,7 @@ def process(path,
     _maybe_download_nltk_data()
     _check_header(header, id_attr, left_prefix, right_prefix, label_attr, ignore_columns)
     fields = _make_fields(header, id_attr, label_attr, ignore_columns, lowercase,
-                          tokenize, include_lengths)
-
+                          tokenize, include_lengths, image_path, image_fields)
     column_naming = {
         'id': id_attr,
         'left': left_prefix,
@@ -218,7 +225,8 @@ def process(path,
         cache,
         check_cached_data,
         auto_rebuild_cache,
-        train_pca=pca)
+        train_pca=pca,
+        **kwargs)
 
     # Save additional information to train dataset.
     datasets[0].ignore_columns = ignore_columns

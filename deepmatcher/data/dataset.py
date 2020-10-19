@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 import pandas as pd
 import pyprind
 import six
+from deepmatcher.data.image_field import ImageField
 from sklearn.decomposition import TruncatedSVD
 
 import torch
@@ -106,8 +107,8 @@ class MatchingDataset(data.Dataset):
                  path=None,
                  format='csv',
                  examples=None,
-                 metadata=None,
-                 **kwargs):
+                 metadata=None
+                 ):
         r"""Creates a MatchingDataset.
 
         Creates a MatchingDataset by performing the following, if `examples` parameter is
@@ -142,29 +143,8 @@ class MatchingDataset(data.Dataset):
                 Default is None. This is a keyword-only parameter.
         """
         if examples is None:
-            make_example = {
-                'json': Example.fromJSON, 'dict': Example.fromdict,
-                'tsv': Example.fromCSV, 'csv': Example.fromCSV}[format.lower()]
-
-            lines = 0
-            with open(os.path.expanduser(path), encoding="utf8") as f:
-                for line in f:
-                    lines += 1
-
-            with open(os.path.expanduser(path), encoding="utf8") as f:
-                if format == 'csv':
-                    reader = unicode_csv_reader(f)
-                elif format == 'tsv':
-                    reader = unicode_csv_reader(f, delimiter='\t')
-                else:
-                    reader = f
-
-                next(reader)
-                examples = [make_example(line, fields) for line in
-                    pyprind.prog_bar(reader, iterations=lines,
-                        title='\nReading and processing data from "' + path + '"')]
-
-            super(MatchingDataset, self).__init__(examples, fields, **kwargs)
+            examples = self.read_examples_from_file(fields, format, path)
+            super(MatchingDataset, self).__init__(examples, fields)
         else:
             self.fields = dict(fields)
             self.examples = examples
@@ -174,6 +154,30 @@ class MatchingDataset(data.Dataset):
         self.column_naming = column_naming
         self._set_attributes()
 
+    @staticmethod
+    def read_examples_from_file(fields, format: str, path):
+        make_example = {
+            'json': Example.fromJSON, 'dict': Example.fromdict,
+            'tsv': Example.fromCSV, 'csv': Example.fromCSV}[format.lower()]
+        lines = 0
+        with open(os.path.expanduser(path), encoding="utf8") as f:
+            for line in f:
+                lines += 1
+        with open(os.path.expanduser(path), encoding="utf8") as f:
+            if format == 'csv':
+                reader = unicode_csv_reader(f)
+            elif format == 'tsv':
+                reader = unicode_csv_reader(f, delimiter='\t')
+            else:
+                reader = f
+
+            next(reader)
+
+            examples = [make_example(line, fields) for line in
+                        pyprind.prog_bar(reader, iterations=lines,
+                                         title='\nReading and processing data from "' + path + '"')]
+        return examples
+
     def _set_attributes(self):
         """Sets attributes by inferring mapping between left and right table attributes.
         """
@@ -182,13 +186,15 @@ class MatchingDataset(data.Dataset):
 
         self.all_left_fields = []
         for name, field in six.iteritems(self.fields):
-            if name.startswith(self.column_naming['left']) and field is not None:
+            if name.startswith(self.column_naming['left']) and field is not None: #and not isinstance(field, ImageField):
                 self.all_left_fields.append(name)
 
         self.all_right_fields = []
         for name, field in six.iteritems(self.fields):
-            if name.startswith(self.column_naming['right']) and field is not None:
+            if name.startswith(self.column_naming['right']) and field is not None: #and not isinstance(field, ImageField):
                 self.all_right_fields.append(name)
+
+        self.image_fields = [name for (name, field) in self.fields.items() if isinstance(field, ImageField)]
 
         self.canonical_text_fields = []
         for left_name in self.all_left_fields:
@@ -196,10 +202,14 @@ class MatchingDataset(data.Dataset):
             right_name = self.column_naming['right'] + canonical_name
             self.corresponding_field[left_name] = right_name
             self.corresponding_field[right_name] = left_name
-            self.text_fields[canonical_name] = left_name, right_name
-            self.canonical_text_fields.append(canonical_name)
+
+            if left_name not in self.image_fields:
+                self.text_fields[canonical_name] = left_name, right_name
+                self.canonical_text_fields.append(canonical_name)
 
         self.all_text_fields = self.all_left_fields + self.all_right_fields
+        [self.all_text_fields.remove(x) for x in self.image_fields]
+
         self.label_field = self.column_naming['label']
         self.id_field = self.column_naming['id']
 
@@ -224,10 +234,10 @@ class MatchingDataset(data.Dataset):
         self.metadata = {}
 
         # Create an iterator over the entire dataset.
+        # TODO we could introduce a flag for leaving out the images so metadata computation is faster
         train_iter = MatchingIterator(
             self, self, train=False, batch_size=1024, device='cpu', sort_in_buckets=False)
         counter = defaultdict(Counter)
-
         # For each attribute, find the number of times each word id occurs in the dataset.
         # Note that word ids here also include ``UNK`` tokens, padding tokens, etc.
         for batch in pyprind.prog_bar(train_iter, title='\nBuilding vocabulary'):
@@ -314,7 +324,7 @@ class MatchingDataset(data.Dataset):
         rows = []
         columns = list(name for name, field in six.iteritems(self.fields) if field)
 
-        # TODO append image column to raw table
+        # TODO append image column to raw table!
 
         for ex in self.examples:
             row = []
@@ -325,6 +335,7 @@ class MatchingDataset(data.Dataset):
                         val = ' '.join(val)
                     row.append(val)
             rows.append(row)
+
 
         return pd.DataFrame(rows, columns=columns)
 
@@ -337,6 +348,7 @@ class MatchingDataset(data.Dataset):
         return interleave_keys([len(getattr(ex, attr)) for attr in self.all_text_fields])
 
     @staticmethod
+    # TODO image field caching does not work. Also: Path or Tensors?
     def save_cache(datasets, fields, datafiles, cachefile, column_naming, state_args):
         r"""Save datasets and corresponding metadata to cache.
 
@@ -370,7 +382,7 @@ class MatchingDataset(data.Dataset):
                 vocabs[name] = field.vocab
         for name, field in six.iteritems(fields):
             field_args[name] = None
-            if field is not None:
+            if field is not None and not isinstance(field, ImageField):
                 field_args[name] = field.preprocess_args()
 
         data = {
@@ -434,6 +446,9 @@ class MatchingDataset(data.Dataset):
             cache_stale_cause.add('Fields have changed.')
 
         for name, field in six.iteritems(fields):
+
+            # TODO here it shows that the ImageFields are not serialized yet
+            #print(f'{field} vs {cached_data["field_args"][name]}')
             none_mismatch = (field is None) != (cached_data['field_args'][name] is None)
             args_mismatch = False
             if field is not None and cached_data['field_args'][name] is not None:
@@ -532,7 +547,6 @@ class MatchingDataset(data.Dataset):
             Tuple[MatchingDataset]: Datasets for (train, validation, and test) splits in
                 that order, if provided.
         """
-
         fields_dict = dict(fields)
         state_args = {'train_pca': train_pca}
 
@@ -559,7 +573,7 @@ class MatchingDataset(data.Dataset):
 
         if not datasets:
             begin = timer()
-            dataset_args = {'fields': fields, 'column_naming': column_naming, **kwargs}
+            dataset_args = {'fields': fields, 'column_naming': column_naming}
             train_data = None if train is None else cls(
                 path=os.path.join(path, train), **dataset_args)
             val_data = None if validation is None else cls(

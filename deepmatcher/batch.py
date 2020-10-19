@@ -88,12 +88,18 @@ class MatchingBatch(object):
     """
 
     def __init__(self, input, train_info):
-        copy_fields = train_info.all_text_fields
+        copy_fields = [field for field in train_info.all_text_fields]
+
         for name in copy_fields:
             setattr(self, name,
                     AttrTensor(
                         name=name, attr=getattr(input, name),
                         train_info=train_info))
+
+        for name in train_info.image_fields:
+            setattr(self, name,
+                    AttrTensor(getattr(input, name), None, None, None))
+
         for name in [train_info.label_field, train_info.id_field]:
             if name is not None and hasattr(input, name):
                 setattr(self, name, getattr(input, name))

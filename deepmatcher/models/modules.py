@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from torchvision import models
 from . import _utils
 from ..batch import AttrTensor
 
@@ -997,6 +998,23 @@ class Transform(LazyModule):
         return output
 
 
+class ImageEmbedding(LazyModule):
+    """
+    Image embedding module, currently only a resnet50 with last fully connect layer replaced by a layer that has the
+    same dimensions as the other features (hidden_size)
+    # TODO does it train or do we need to replace
+    # TODO other
+    """
+
+    def _init(self, pretrained=True, *args, **kwargs):
+        self.resnet50 = models.resnet50(pretrained=True)
+        num_ftrs = self.resnet50.fc.in_features
+        self.resnet50.fc = nn.Linear(in_features=num_ftrs, out_features=kwargs['hidden_size'])
+
+    def _forward(self, x):
+        return self.resnet50.forward(x)
+
+
 def _merge_module(op):
     module = _utils.get_module(Merge, op)
     if module:
@@ -1025,4 +1043,9 @@ def _alignment_module(op, hidden_size):
     module = _utils.get_module(
         AlignmentNetwork, op, hidden_size=hidden_size, required=True)
     module.expect_signature('[AxBxC, AxDxC] -> [AxBxD]')
+    return module
+
+def _im_embedding_module(im_embedding_type, hidden_size):
+    # TODO not sure how this works
+    module = _utils.get_module(ImageEmbedding, im_embedding_type, hidden_size=hidden_size)
     return module

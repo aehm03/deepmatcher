@@ -45,7 +45,7 @@ class MatchingIterator(data.BucketIterator):
             ret.append(
                 cls(datasets[i],
                     train_info=datasets[0],
-                    train=i==0,
+                    train=i == 0,
                     batch_size=batch_sizes[i],
                     **kwargs))
         return tuple(ret)

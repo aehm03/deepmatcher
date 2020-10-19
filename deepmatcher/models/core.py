@@ -8,6 +8,7 @@ import six
 import deepmatcher as dm
 import torch
 import torch.nn as nn
+from deepmatcher.batch import MatchingBatch
 
 from . import _utils
 from ..data import MatchingDataset, MatchingIterator
@@ -87,7 +88,8 @@ class MatchingModel(nn.Module):
                  attr_comparator=None,
                  attr_merge='concat',
                  classifier='2-layer-highway',
-                 hidden_size=300):
+                 hidden_size=300,
+                 im_embedder=None):
 
         super(MatchingModel, self).__init__()
 
@@ -96,6 +98,7 @@ class MatchingModel(nn.Module):
         self.attr_comparator = attr_comparator
         self.attr_merge = attr_merge
         self.classifier = classifier
+        self.im_embedder = im_embedder
 
         self.hidden_size = hidden_size
         self._train_buffers = set()
@@ -342,6 +345,14 @@ class MatchingModel(nn.Module):
 
         self._reset_embeddings(train_dataset.vocabs)
 
+        # we only need im_embeder and attr comparator
+        if self.im_embedder is not None:
+            self.im_embedder = _create_im_embedder(self.im_embedder, hidden_size=self.hidden_size)
+
+            # looks like this b/c image column is id right now and we dont have this canonical text fields stuff
+            # hardcoded stuff should be avoided
+            self.attr_comparators['id'] = copy.deepcopy(self.attr_comparator)
+
         # Instantiate all components using a small batch from training set.
         if not init_batch:
             run_iter = MatchingIterator(
@@ -404,7 +415,7 @@ class MatchingModel(nn.Module):
             return 'concat-abs-diff'
         raise ValueError('Cannot infer attr comparator, please specify.')
 
-    def forward(self, input):
+    def forward(self, input: MatchingBatch):
         r"""Performs a forward pass through the model.
 
         Overrides :meth:`torch.nn.Module.forward`.
@@ -417,6 +428,11 @@ class MatchingModel(nn.Module):
         for name in self.meta.all_text_fields:
             attr_input = getattr(input, name)
             embeddings[name] = self.embed[name](attr_input)
+
+        # image column at it agaim
+        for name in self.meta.image_fields:
+            attr_input = getattr(input, name)
+            embeddings[name] = self.im_embedder(attr_input.data)
 
         attr_comparisons = []
         for name in self.meta.canonical_text_fields:
@@ -432,6 +448,10 @@ class MatchingModel(nn.Module):
                 right_summary = self.attr_condensors[name](right_summary)
             attr_comparisons.append(self.attr_comparators[name](left_summary,
                                                                 right_summary))
+
+        # todo the whole text_fields, canonical_text_field and all_text_fields is a bit annoying
+        for name in ['id']:
+            attr_comparisons.append(self.attr_comparators[name](embeddings['ltable_id'], embeddings['rtable_id']))
 
         entity_comparison = self.attr_merge(*attr_comparisons)
         return self.classifier(entity_comparison)
@@ -592,6 +612,20 @@ def _create_attr_comparator(arg):
     module.expect_signature('[AxB, AxB] -> [AxC]')
     return module
 
+
+def _create_im_embedder(im_embedder, **kwargs):
+    """
+    Creates an image embedder object
+    # TODO why needed, its just a pass throug?
+    # TODO expected signature?
+    :param im_embedder:
+    :param kwargs:
+    :return:
+    """
+    assert im_embedder is not None
+    module = dm.modules._im_embedding_module(im_embedder, **kwargs)
+
+    return module
 
 class WordContextualizer(dm.modules.LazyModule):
     r"""__init__()
