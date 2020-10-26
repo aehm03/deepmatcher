@@ -3,10 +3,11 @@ from typing import List
 import torch
 
 from PIL import Image
+from deepmatcher.data import MatchingField
 from torchvision import transforms
 
 
-class ImageField:
+class ImageField(MatchingField):
     """
     Represents a field containing an image
     Did not want to use the Field/RawField classes from torchtext but implements some methods from them.
@@ -62,3 +63,6 @@ class ImageField:
             return path
         else:
             return None
+
+    def preprocess_args(self):
+        return {'image_path': self.image_directory_path}

@@ -382,7 +382,7 @@ class MatchingDataset(data.Dataset):
                 vocabs[name] = field.vocab
         for name, field in six.iteritems(fields):
             field_args[name] = None
-            if field is not None and not isinstance(field, ImageField):
+            if field is not None:
                 field_args[name] = field.preprocess_args()
 
         data = {
@@ -446,9 +446,6 @@ class MatchingDataset(data.Dataset):
             cache_stale_cause.add('Fields have changed.')
 
         for name, field in six.iteritems(fields):
-
-            # TODO here it shows that the ImageFields are not serialized yet
-            #print(f'{field} vs {cached_data["field_args"][name]}')
             none_mismatch = (field is None) != (cached_data['field_args'][name] is None)
             args_mismatch = False
             if field is not None and cached_data['field_args'][name] is not None:
@@ -456,7 +453,7 @@ class MatchingDataset(data.Dataset):
             if none_mismatch or args_mismatch:
                 cache_stale_cause.add('Field arguments have changed.')
             if field is not None and not isinstance(field, MatchingField):
-                cache_stale_cause.add('Cache update required.')
+                cache_stale_cause.add(('Cache update required.', field))
 
         if column_naming != cached_data['column_naming']:
             cache_stale_cause.add('Other arguments have changed.')
