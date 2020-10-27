@@ -41,7 +41,7 @@ def _check_header(header, id_attr, left_prefix, right_prefix, label_attr, ignore
 
 
 def _make_fields(header, id_attr, label_attr, ignore_columns, lower, tokenize,
-                 include_lengths, image_path=None, image_fields=None):
+                 include_lengths, image_dir=None, image_fields=None):
     r"""Create field metadata, i.e., attribute processing specification for each
     attribute.
 
@@ -62,7 +62,7 @@ def _make_fields(header, id_attr, label_attr, ignore_columns, lower, tokenize,
         include_lengths=include_lengths)
     numeric_field = MatchingField(
         sequential=False, preprocessing=lambda x: int(x), use_vocab=False)
-    image_field = ImageField(image_path)
+    image_field = ImageField(image_dir)
     id_field = MatchingField(sequential=False, use_vocab=False, id=True)
 
     fields = []
@@ -107,7 +107,7 @@ def process(path,
             right_prefix='right_',
             use_magellan_convention=False,
             pca=True,
-            image_path: str = None,
+            image_dir: str = None,
             image_fields: List[str] = [],
             **kwargs
             ) -> Tuple[MatchingDataset, ...]:
@@ -181,7 +181,7 @@ def process(path,
             Specifically, set them to be '_id', 'ltable_', and 'rtable_' respectively.
         pca (bool): Whether to compute PCA for each attribute (needed for SIF model).
             Defaults to False.
-        image_path: path to directory of image files
+        image_dir: path to directory of image files
         image_fields: fields that contain image names for left and right (
 
     Returns:
@@ -205,7 +205,7 @@ def process(path,
     _maybe_download_nltk_data()
     _check_header(header, id_attr, left_prefix, right_prefix, label_attr, ignore_columns)
     fields = _make_fields(header, id_attr, label_attr, ignore_columns, lowercase,
-                          tokenize, include_lengths, image_path, image_fields)
+                          tokenize, include_lengths, image_dir, image_fields)
     column_naming = {
         'id': id_attr,
         'left': left_prefix,

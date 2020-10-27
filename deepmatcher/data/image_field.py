@@ -17,8 +17,8 @@ class ImageField(MatchingField):
     * not all products have an image, they are replaced with empyt tensors
     """
 
-    def __init__(self, image_path):
-        self.image_directory_path = image_path
+    def __init__(self, image_directory):
+        self.image_directory = image_directory
         self.use_vocab = False
         self.is_target = False
         self.image_transformation = transforms.Compose([
@@ -58,11 +58,11 @@ class ImageField(MatchingField):
 
         # checks if this product has an image
         # for now we only take the first one
-        path = os.path.join(self.image_directory_path, val + '.png')
+        path = os.path.join(self.image_directory, val + '.png')
         if os.path.exists(path):
             return path
         else:
             return None
 
     def preprocess_args(self):
-        return {'image_path': self.image_directory_path}
+        return {'image_directory': self.image_directory}
