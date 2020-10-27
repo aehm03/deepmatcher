@@ -230,7 +230,7 @@ class Runner(object):
             stats.update(float(loss), *scores)
 
             if batch_callback is not None:
-                batch_callback(stats.f1(), batch_idx)
+                batch_callback(run_type, stats, batch_idx)
 
             if return_predictions:
                 for idx, id in enumerate(getattr(batch, id_attr)):
@@ -264,7 +264,7 @@ class Runner(object):
             sys.stderr.flush()
 
         if epoch_callback is not None:
-            epoch_callback(stats.f1(), epoch + 1)
+            epoch_callback(run_type, cum_stats, epoch + 1)
 
         Runner._print_final_stats(epoch + 1, runtime, datatime, cum_stats)
 
