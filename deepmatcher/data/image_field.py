@@ -57,7 +57,6 @@ class ImageField(MatchingField):
         """ Preprocess an example if the `preprocessing` Pipeline is provided. """
 
         # checks if this product has an image
-        # for now we only take the first one
         path = os.path.join(self.image_directory, val + '.png')
         if os.path.exists(path):
             return path
