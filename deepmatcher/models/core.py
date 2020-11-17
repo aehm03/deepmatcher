@@ -450,8 +450,10 @@ class MatchingModel(nn.Module):
                                                                 right_summary))
 
         # todo the whole text_fields, canonical_text_field and all_text_fields is a bit annoying
-        for name in ['id']:
-            attr_comparisons.append(self.attr_comparators[name](embeddings['ltable_id'], embeddings['rtable_id']))
+        # this is a bit wacky
+        if self.meta.image_fields:
+            for name in ['id']:
+                attr_comparisons.append(self.attr_comparators[name](embeddings['ltable_id'], embeddings['rtable_id']))
 
         entity_comparison = self.attr_merge(*attr_comparisons)
         return self.classifier(entity_comparison)
