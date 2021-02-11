@@ -1008,11 +1008,25 @@ class ImageEmbedding(LazyModule):
 
     def _init(self, pretrained=True, *args, **kwargs):
         self.resnet50 = models.resnet50(pretrained=True)
-        num_ftrs = self.resnet50.fc.in_features
-        self.resnet50.fc = nn.Linear(in_features=num_ftrs, out_features=kwargs['hidden_size'])
+
+        # freeze layer 1 - 6
+        ct = 0
+        for child in self.resnet50.children():
+            ct += 1
+            if ct < 7:
+                for param in child.parameters():
+                    param.requires_grad = False
+
+        # downsammpling from last layer of resnet (1000) to embedding dimension
+        num_ftrs = self.resnet50.fc.out_features
+
+        self.model = nn.Sequential(
+            self.resnet50,
+            nn.ReLU(),
+            nn.Linear(in_features=num_ftrs, out_features=kwargs['hidden_size']))
 
     def _forward(self, x):
-        return self.resnet50.forward(x)
+        return self.model.forward(x)
 
 
 def _merge_module(op):
